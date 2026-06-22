@@ -30,6 +30,7 @@ class Collectible(pygame.sprite.Sprite):
         objective_points: int = 0,
         image: pygame.Surface | None = None,
         color: pygame.Color | tuple[int, int, int] = (80, 155, 230),
+        lifetime: float | None = None,
     ) -> None:
         super().__init__()
 
@@ -46,6 +47,11 @@ class Collectible(pygame.sprite.Sprite):
 
         if objective_points < 0:
             raise ValueError("objective_points no puede ser negativo.")
+
+        if lifetime is not None and lifetime <= 0:
+            raise ValueError("lifetime debe ser mayor que cero.")
+
+        unknown_keys = set(effects) - set(EFFECT_KEYS)
 
         unknown_keys = set(effects) - set(EFFECT_KEYS)
 
@@ -72,6 +78,9 @@ class Collectible(pygame.sprite.Sprite):
         self.item_type = normalized_type
         self.effects = normalized_effects
         self.objective_points = objective_points
+        self.remaining_lifetime = (
+            float(lifetime) if lifetime is not None else None
+        )
 
         if image is None:
             self.image = self._create_placeholder(color)
@@ -81,6 +90,20 @@ class Collectible(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(
             center=(round(position[0]), round(position[1]))
         )
+
+    def update(self, dt: float) -> None:
+        """Elimina el objeto cuando termina su tiempo de vida."""
+
+        if dt < 0:
+            raise ValueError("delta time no puede ser negativo.")
+
+        if self.remaining_lifetime is None:
+            return
+
+        self.remaining_lifetime -= dt
+
+        if self.remaining_lifetime <= 0:
+            self.kill()
 
     @staticmethod
     def _create_placeholder(
