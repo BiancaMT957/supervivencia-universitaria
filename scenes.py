@@ -31,6 +31,16 @@ from constants import (
     TRANSITION_DURATION,
     TRANSITION_RING_COLOR,
     TRANSITION_RING_SECONDARY_COLOR,
+    COFFEE_COLOR,
+    EXTRA_CREDIT_COLOR,
+    FINALS_DURATION,
+    FINALS_INITIAL_ITEMS,
+    FINALS_ITEM_LIFETIME_SECONDS,
+    FINALS_MAX_ITEMS,
+    FINALS_SPAWN_MAX_SECONDS,
+    FINALS_SPAWN_MIN_SECONDS,
+    ILLNESS_COLOR,
+    SURPRISE_EXAM_COLOR,
 )
 from player import Player
 
@@ -97,6 +107,59 @@ CAMPUS_ITEM_DEFINITIONS = (
     },
 )
 
+FINALS_ITEM_DEFINITIONS = (
+    {
+        "item_type": "notes",
+        "effects": {
+            "grades": 8,
+        },
+        "color": NOTES_COLOR,
+        "weight": 15,
+    },
+    {
+        "item_type": "coffee",
+        "effects": {
+            "energy": 10,
+            "money": -5,
+        },
+        "color": COFFEE_COLOR,
+        "weight": 15,
+    },
+    {
+        "item_type": "extra_credit",
+        "effects": {
+            "grades": 12,
+        },
+        "color": EXTRA_CREDIT_COLOR,
+        "weight": 10,
+    },
+    {
+        "item_type": "illness",
+        "effects": {
+            "energy": -15,
+            "money": -8,
+        },
+        "color": ILLNESS_COLOR,
+        "weight": 20,
+    },
+    {
+        "item_type": "sleep_deprivation",
+        "effects": {
+            "energy": -12,
+        },
+        "color": DISTRACTION_COLOR,
+        "weight": 20,
+    },
+    {
+        "item_type": "surprise_exam",
+        "effects": {
+            "energy": -8,
+            "grades": -5,
+        },
+        "color": SURPRISE_EXAM_COLOR,
+        "weight": 20,
+    },
+)
 
 class CampusScene:
     """Escenario de Campus.
@@ -439,17 +502,21 @@ class TransitionScene:
 
 
 class FinalsScene:
-    """Escenario provisional para probar el cambio desde Campus.
+    """Escenario de Semana de Finales.
 
-    Los objetos, temporizador y reglas propias de Finales se integrarán
-    en una entrega posterior.
+    Administra jugador, recolectables, aparición de objetos,
+    colisiones y temporizador. No decide victoria o derrota.
     """
 
     def __init__(
         self,
         screen_bounds: pygame.Rect,
+        effect_handler: EffectHandler,
+        rng: random.Random | None = None,
     ) -> None:
         self.screen_bounds = pygame.Rect(screen_bounds)
+        self.effect_handler = effect_handler
+        self.rng = rng or random.Random()
 
         self.play_bounds = pygame.Rect(
             self.screen_bounds.left + PLAY_AREA_MARGIN,
@@ -466,9 +533,20 @@ class FinalsScene:
             )
 
         self.player_group = pygame.sprite.GroupSingle()
+        self.items = pygame.sprite.Group()
+
         self.player: Player
 
+        self.remaining_time = 0.0
+        self.items_collected = 0
+
+        self._spawn_timer = 0.0
+
         self.reset()
+
+    @property
+    def time_expired(self) -> bool:
+        return self.remaining_time <= 0.0
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """Finales todavía no posee eventos discretos propios."""
@@ -476,12 +554,45 @@ class FinalsScene:
         _ = event
 
     def update(self, dt: float) -> None:
+        """Actualiza los sistemas activos de Semana de Finales."""
+
         if dt < 0:
             raise ValueError("delta time no puede ser negativo.")
 
+        if self.is_complete():
+            return
+
+        self.remaining_time = max(
+            0.0,
+            self.remaining_time - dt,
+        )
+
+        if self.time_expired:
+            return
+
         self.player_group.update(dt)
+        self.items.update(dt)
+
+        collided_items = collect_items(
+            self.player,
+            self.items,
+        )
+
+        for item in collided_items:
+            self.effect_handler(item.effects)
+            self.items_collected += 1
+
+        self._spawn_timer -= dt
+
+        if self._spawn_timer <= 0.0:
+            if len(self.items) < FINALS_MAX_ITEMS:
+                self._spawn_collectible()
+
+            self._schedule_next_spawn()
 
     def draw(self, screen: pygame.Surface) -> None:
+        """Dibuja fondo, objetos y jugador."""
+
         screen.fill(FINALS_BACKGROUND_COLOR)
 
         pygame.draw.rect(
@@ -497,14 +608,21 @@ class FinalsScene:
             width=2,
         )
 
+        self.items.draw(screen)
         self.player_group.draw(screen)
 
     def is_complete(self) -> bool:
-        """Finales aún no tiene condición de finalización."""
+        """Finales termina cuando se agota su temporizador."""
 
-        return False
+        return self.time_expired
 
     def reset(self) -> None:
+        """Restaura completamente Semana de Finales."""
+
+        self.remaining_time = FINALS_DURATION
+        self.items_collected = 0
+
+        self.items.empty()
         self.player_group.empty()
 
         self.player = Player(
@@ -513,3 +631,94 @@ class FinalsScene:
         )
 
         self.player_group.add(self.player)
+
+        for _ in range(FINALS_INITIAL_ITEMS):
+            self._spawn_collectible()
+
+        self._schedule_next_spawn()
+
+    def _schedule_next_spawn(self) -> None:
+        self._spawn_timer = self.rng.uniform(
+            FINALS_SPAWN_MIN_SECONDS,
+            FINALS_SPAWN_MAX_SECONDS,
+        )
+
+    def _spawn_collectible(self) -> None:
+        definitions = FINALS_ITEM_DEFINITIONS
+
+        weights = [
+            int(definition["weight"])
+            for definition in definitions
+        ]
+
+        definition = self.rng.choices(
+            definitions,
+            weights=weights,
+            k=1,
+        )[0]
+
+        item = Collectible(
+            position=self._find_spawn_position(),
+            item_type=str(definition["item_type"]),
+            effects=definition["effects"],
+            objective_points=0,
+            color=definition["color"],
+            lifetime=FINALS_ITEM_LIFETIME_SECONDS,
+        )
+
+        self.items.add(item)
+
+    def _find_spawn_position(self) -> tuple[int, int]:
+        """Busca una posición libre dentro de la arena de Finales."""
+
+        item_width, item_height = COLLECTIBLE_SIZE
+
+        half_width = item_width // 2
+        half_height = item_height // 2
+
+        left = self.play_bounds.left + half_width
+        right = self.play_bounds.right - half_width
+        top = self.play_bounds.top + half_height
+        bottom = self.play_bounds.bottom - half_height
+
+        if left > right or top > bottom:
+            raise ValueError(
+                "El área de Finales es menor que un recolectable."
+            )
+
+        for _ in range(30):
+            position = (
+                self.rng.randint(left, right),
+                self.rng.randint(top, bottom),
+            )
+
+            candidate = pygame.Rect(
+                0,
+                0,
+                item_width,
+                item_height,
+            )
+            candidate.center = position
+
+            player_safe_area = self.player.rect.inflate(
+                100,
+                100,
+            )
+
+            if candidate.colliderect(player_safe_area):
+                continue
+
+            overlaps_item = any(
+                candidate.colliderect(
+                    item.rect.inflate(12, 12)
+                )
+                for item in self.items
+            )
+
+            if not overlaps_item:
+                return position
+
+        return (
+            self.rng.randint(left, right),
+            self.rng.randint(top, bottom),
+        )

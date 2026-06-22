@@ -49,7 +49,19 @@ def build_window_title(
         )
 
     elif state is GameState.FINALS:
-        detail = "Semana de Finales"
+        scene = controller.finals_scene
+
+        if scene.time_expired:
+            detail = (
+                "Tiempo agotado"
+                " | Pendiente de resultado"
+            )
+        else:
+            detail = (
+                f"Objetos: {scene.items_collected}"
+                f" | Tiempo: "
+                f"{math.ceil(scene.remaining_time)} s"
+            )
 
     else:
         detail = state.name

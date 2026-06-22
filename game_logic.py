@@ -50,6 +50,7 @@ class GameController:
 
         self.finals_scene = FinalsScene(
             screen_bounds=self.screen_bounds,
+            effect_handler=effect_handler,
         )
 
         # Durante esta etapa de desarrollo iniciamos directamente
@@ -57,6 +58,7 @@ class GameController:
         self.current_state = GameState.CAMPUS
 
         self._campus_timeout_reported = False
+        self._finals_timeout_reported = False
 
     @property
     def active_scene(
@@ -100,6 +102,9 @@ class GameController:
         elif self.current_state is GameState.TRANSITION:
             self._update_transition_state()
 
+        elif self.current_state is GameState.FINALS:
+            self._update_finals_state()
+
     def draw(self, screen: pygame.Surface) -> None:
         self.active_scene.draw(screen)
 
@@ -114,6 +119,7 @@ class GameController:
         self.current_state = GameState.CAMPUS
 
         self._campus_timeout_reported = False
+        self._finals_timeout_reported = False
 
         print(
             f"[ESTADO] {previous_state.name} -> "
@@ -141,6 +147,25 @@ class GameController:
         if self.transition_scene.is_complete():
             self._change_state(GameState.FINALS)
 
+    def _update_finals_state(self) -> None:
+        """Informa una sola vez que Finales terminó.
+
+        La decisión de victoria o derrota quedará a cargo de las
+        estadísticas y reglas definitivas.
+        """
+
+        if (
+            self.finals_scene.time_expired
+            and not self._finals_timeout_reported
+        ):
+            self._finals_timeout_reported = True
+
+            print(
+                "[FINALS] Tiempo agotado. "
+                "Pendiente evaluar estadísticas para decidir "
+                "VICTORY o DEFEAT."
+            )
+
     def _change_state(self, new_state: GameState) -> None:
         """Realiza un cambio de estado único y controlado."""
 
@@ -154,6 +179,7 @@ class GameController:
 
         elif new_state is GameState.FINALS:
             self.finals_scene.reset()
+            self._finals_timeout_reported = False
 
         self.current_state = new_state
 

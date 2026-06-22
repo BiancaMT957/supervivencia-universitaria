@@ -3,7 +3,12 @@ import random
 import pygame
 
 from collectibles import Collectible
-from scenes import CampusScene, TransitionScene
+
+from scenes import (
+    CampusScene,
+    FinalsScene,
+    TransitionScene,
+)
 
 
 SCREEN_BOUNDS = pygame.Rect(0, 0, 960, 540)
@@ -20,6 +25,16 @@ def create_campus(
         rng=random.Random(1234),
     )
 
+def create_finals(
+    effects: list[dict[str, int]],
+) -> FinalsScene:
+    return FinalsScene(
+        screen_bounds=SCREEN_BOUNDS,
+        effect_handler=lambda effect: effects.append(
+            dict(effect)
+        ),
+        rng=random.Random(5678),
+    )
 
 def test_academic_item_increases_progress(
     no_keyboard_input,
@@ -164,3 +179,80 @@ def test_transition_completes_after_duration() -> None:
     scene.update(0.7)
     assert scene.is_complete()
     assert scene.progress == 1.0
+
+def test_finals_collectible_applies_effect(
+    no_keyboard_input,
+) -> None:
+    effects: list[dict[str, int]] = []
+    scene = create_finals(effects)
+
+    scene.items.empty()
+    scene.items_collected = 0
+
+    item = Collectible(
+        position=scene.player.rect.center,
+        item_type="coffee",
+        effects={
+            "energy": 10,
+            "money": -5,
+        },
+    )
+
+    scene.items.add(item)
+    scene.update(0.01)
+
+    assert scene.items_collected == 1
+    assert effects == [
+        {
+            "energy": 10,
+            "money": -5,
+            "grades": 0,
+        }
+    ]
+    assert len(scene.items) == 0
+
+
+def test_finals_completes_when_time_expires(
+    no_keyboard_input,
+) -> None:
+    effects: list[dict[str, int]] = []
+    scene = create_finals(effects)
+
+    scene.remaining_time = 0.01
+    scene.update(0.02)
+
+    assert scene.time_expired
+    assert scene.is_complete()
+    assert scene.remaining_time == 0.0
+
+
+def test_completed_finals_does_not_spawn_items(
+    no_keyboard_input,
+) -> None:
+    effects: list[dict[str, int]] = []
+    scene = create_finals(effects)
+
+    scene.items.empty()
+    scene.remaining_time = 0.0
+
+    scene.update(20.0)
+
+    assert len(scene.items) == 0
+
+
+def test_reset_restores_finals_state(
+    no_keyboard_input,
+) -> None:
+    effects: list[dict[str, int]] = []
+    scene = create_finals(effects)
+
+    scene.items_collected = 8
+    scene.remaining_time = 0.0
+    scene.items.empty()
+
+    scene.reset()
+
+    assert scene.items_collected == 0
+    assert not scene.time_expired
+    assert len(scene.items) > 0
+    assert scene.player.rect.center == scene.play_bounds.center
