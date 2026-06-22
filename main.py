@@ -54,13 +54,15 @@ def build_window_title(
         if scene.time_expired:
             detail = (
                 "Tiempo agotado"
-                " | Pendiente de resultado"
+                " | Resultado pendiente"
             )
         else:
             detail = (
-                f"Objetos: {scene.items_collected}"
+                "Meta: resistir hasta 0 s"
                 f" | Tiempo: "
                 f"{math.ceil(scene.remaining_time)} s"
+                f" | Recogidos: "
+                f"{scene.items_collected}"
             )
 
     else:
