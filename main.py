@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 
 import pygame
+import math
 
 from constants import (
     FPS,
@@ -8,7 +9,7 @@ from constants import (
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
 )
-from game_logic import GameController
+from game_logic import GameController, GameState
 
 
 def log_effect(effect: Mapping[str, int]) -> None:
@@ -17,12 +18,46 @@ def log_effect(effect: Mapping[str, int]) -> None:
     print(f"[EFECTO] {dict(effect)}")
 
 
-def update_window_title(
+def build_window_title(
     controller: GameController,
-) -> None:
-    pygame.display.set_caption(
+) -> str:
+    """Construye un título diagnóstico según el estado activo."""
+
+    state = controller.current_state
+
+    if state is GameState.CAMPUS:
+        scene = controller.campus_scene
+
+        detail = (
+            f"Materiales: "
+            f"{scene.tasks_collected}/{scene.target_tasks}"
+            f" | Tiempo: "
+            f"{math.ceil(scene.remaining_time)} s"
+        )
+
+    elif state is GameState.TRANSITION:
+        scene = controller.transition_scene
+
+        remaining = max(
+            0.0,
+            scene.duration - scene.elapsed_time,
+        )
+
+        detail = (
+            f"Finales en "
+            f"{math.ceil(remaining)} s"
+        )
+
+    elif state is GameState.FINALS:
+        detail = "Semana de Finales"
+
+    else:
+        detail = state.name
+
+    return (
         "Supervivencia Universitaria"
-        f" | {controller.current_state.name}"
+        f" | {state.name}"
+        f" | {detail}"
         " | R: reiniciar"
     )
 
@@ -42,7 +77,7 @@ def run() -> None:
             effect_handler=log_effect,
         )
 
-        previous_state = None
+        previous_title = ""
         running = True
 
         while running:
@@ -66,9 +101,11 @@ def run() -> None:
 
             controller.update(dt)
 
-            if controller.current_state is not previous_state:
-                update_window_title(controller)
-                previous_state = controller.current_state
+            title = build_window_title(controller)
+
+            if title != previous_title:
+                pygame.display.set_caption(title)
+                previous_title = title
 
             controller.draw(screen)
             pygame.display.flip()
