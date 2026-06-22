@@ -1,4 +1,3 @@
-import math
 from collections.abc import Mapping
 
 import pygame
@@ -9,7 +8,7 @@ from constants import (
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
 )
-from scenes import CampusScene
+from game_logic import GameController
 
 
 def log_effect(effect: Mapping[str, int]) -> None:
@@ -18,28 +17,13 @@ def log_effect(effect: Mapping[str, int]) -> None:
     print(f"[EFECTO] {dict(effect)}")
 
 
-def update_caption(scene: CampusScene) -> None:
-    """Muestra temporalmente progreso y estado en el título."""
-
-    if scene.objective_reached:
-        status = "OBJETIVO COMPLETADO"
-
-    elif scene.time_expired:
-        status = "TIEMPO AGOTADO"
-
-    else:
-        status = (
-            f"Materiales: "
-            f"{scene.tasks_collected}/{scene.target_tasks}"
-            f" | Tiempo: "
-            f"{math.ceil(scene.remaining_time)} s"
-        )
-
+def update_window_title(
+    controller: GameController,
+) -> None:
     pygame.display.set_caption(
-        f"Supervivencia Universitaria"
-        f" | Campus"
-        f" | {status}"
-        f" | R: reiniciar"
+        "Supervivencia Universitaria"
+        f" | {controller.current_state.name}"
+        " | R: reiniciar"
     )
 
 
@@ -53,11 +37,12 @@ def run() -> None:
 
         clock = pygame.time.Clock()
 
-        scene = CampusScene(
+        controller = GameController(
             screen_bounds=screen.get_rect(),
             effect_handler=log_effect,
         )
 
+        previous_state = None
         running = True
 
         while running:
@@ -70,19 +55,22 @@ def run() -> None:
                 if event.type == pygame.QUIT:
                     running = False
 
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        running = False
+                elif (
+                    event.type == pygame.KEYDOWN
+                    and event.key == pygame.K_ESCAPE
+                ):
+                    running = False
 
-                    elif event.key == pygame.K_r:
-                        scene.reset()
+                else:
+                    controller.handle_event(event)
 
-                scene.handle_event(event)
+            controller.update(dt)
 
-            scene.update(dt)
-            update_caption(scene)
-            scene.draw(screen)
+            if controller.current_state is not previous_state:
+                update_window_title(controller)
+                previous_state = controller.current_state
 
+            controller.draw(screen)
             pygame.display.flip()
 
     finally:

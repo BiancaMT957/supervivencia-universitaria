@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable, Mapping
 
+import math
 import pygame
 
 from collectibles import Collectible, collect_items
@@ -23,6 +24,13 @@ from constants import (
     PLAY_AREA_COLOR,
     PLAY_AREA_MARGIN,
     TASK_COLOR,
+    FINALS_BACKGROUND_COLOR,
+    FINALS_BORDER_COLOR,
+    FINALS_PLAY_AREA_COLOR,
+    TRANSITION_BACKGROUND_COLOR,
+    TRANSITION_DURATION,
+    TRANSITION_RING_COLOR,
+    TRANSITION_RING_SECONDARY_COLOR,
 )
 from player import Player
 
@@ -328,3 +336,180 @@ class CampusScene:
             self.rng.randint(left, right),
             self.rng.randint(top, bottom),
         )
+
+class TransitionScene:
+    """Transición temporal entre Campus y Semana de Finales."""
+
+    def __init__(
+        self,
+        screen_bounds: pygame.Rect,
+        duration: float = TRANSITION_DURATION,
+    ) -> None:
+        if duration <= 0:
+            raise ValueError(
+                "La duración de la transición debe ser mayor que cero."
+            )
+
+        self.screen_bounds = pygame.Rect(screen_bounds)
+        self.duration = float(duration)
+        self.elapsed_time = 0.0
+
+    @property
+    def progress(self) -> float:
+        """Progreso normalizado de la transición entre 0 y 1."""
+
+        return min(
+            1.0,
+            self.elapsed_time / self.duration,
+        )
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        """La transición no procesa controles propios."""
+
+        _ = event
+
+    def update(self, dt: float) -> None:
+        if dt < 0:
+            raise ValueError("delta time no puede ser negativo.")
+
+        self.elapsed_time = min(
+            self.duration,
+            self.elapsed_time + dt,
+        )
+
+    def draw(self, screen: pygame.Surface) -> None:
+        """Dibuja una animación circular provisional."""
+
+        screen.fill(TRANSITION_BACKGROUND_COLOR)
+
+        center = self.screen_bounds.center
+        base_radius = min(
+            self.screen_bounds.width,
+            self.screen_bounds.height,
+        ) // 8
+
+        pulse = 1.0 + 0.08 * math.sin(
+            self.elapsed_time * 6.0
+        )
+
+        radius = round(base_radius * pulse)
+
+        ring_rect = pygame.Rect(
+            0,
+            0,
+            radius * 2,
+            radius * 2,
+        )
+        ring_rect.center = center
+
+        pygame.draw.circle(
+            screen,
+            TRANSITION_RING_SECONDARY_COLOR,
+            center,
+            radius,
+            width=4,
+        )
+
+        start_angle = self.elapsed_time * 4.0
+        end_angle = start_angle + math.pi * 1.4
+
+        pygame.draw.arc(
+            screen,
+            TRANSITION_RING_COLOR,
+            ring_rect,
+            start_angle,
+            end_angle,
+            width=9,
+        )
+
+        inner_radius = max(8, radius // 4)
+
+        pygame.draw.circle(
+            screen,
+            TRANSITION_RING_COLOR,
+            center,
+            inner_radius,
+        )
+
+    def is_complete(self) -> bool:
+        return self.elapsed_time >= self.duration
+
+    def reset(self) -> None:
+        self.elapsed_time = 0.0
+
+
+class FinalsScene:
+    """Escenario provisional para probar el cambio desde Campus.
+
+    Los objetos, temporizador y reglas propias de Finales se integrarán
+    en una entrega posterior.
+    """
+
+    def __init__(
+        self,
+        screen_bounds: pygame.Rect,
+    ) -> None:
+        self.screen_bounds = pygame.Rect(screen_bounds)
+
+        self.play_bounds = pygame.Rect(
+            self.screen_bounds.left + PLAY_AREA_MARGIN,
+            self.screen_bounds.top + HUD_HEIGHT,
+            self.screen_bounds.width - 2 * PLAY_AREA_MARGIN,
+            self.screen_bounds.height
+            - HUD_HEIGHT
+            - PLAY_AREA_MARGIN,
+        )
+
+        if self.play_bounds.width <= 0 or self.play_bounds.height <= 0:
+            raise ValueError(
+                "El área jugable de Finales no tiene dimensiones válidas."
+            )
+
+        self.player_group = pygame.sprite.GroupSingle()
+        self.player: Player
+
+        self.reset()
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        """Finales todavía no posee eventos discretos propios."""
+
+        _ = event
+
+    def update(self, dt: float) -> None:
+        if dt < 0:
+            raise ValueError("delta time no puede ser negativo.")
+
+        self.player_group.update(dt)
+
+    def draw(self, screen: pygame.Surface) -> None:
+        screen.fill(FINALS_BACKGROUND_COLOR)
+
+        pygame.draw.rect(
+            screen,
+            FINALS_PLAY_AREA_COLOR,
+            self.play_bounds,
+        )
+
+        pygame.draw.rect(
+            screen,
+            FINALS_BORDER_COLOR,
+            self.play_bounds,
+            width=2,
+        )
+
+        self.player_group.draw(screen)
+
+    def is_complete(self) -> bool:
+        """Finales aún no tiene condición de finalización."""
+
+        return False
+
+    def reset(self) -> None:
+        self.player_group.empty()
+
+        self.player = Player(
+            position=self.play_bounds.center,
+            bounds=self.play_bounds,
+        )
+
+        self.player_group.add(self.player)
