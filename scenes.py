@@ -235,6 +235,7 @@ class CampusScene:
         )
 
         if self.time_expired:
+            self.items.empty()
             return
 
         self.player_group.update(dt)
@@ -568,6 +569,7 @@ class FinalsScene:
         )
 
         if self.time_expired:
+            self.items.empty()
             return
 
         self.player_group.update(dt)

@@ -126,9 +126,12 @@ def test_campus_completes_when_time_expires(
     effects: list[dict[str, int]] = []
     scene = create_campus(effects)
 
+    assert len(scene.items) > 0
+
     scene.remaining_time = 0.01
     scene.update(0.02)
 
+    assert len(scene.items) == 0
     assert scene.time_expired
     assert scene.is_complete()
     assert scene.remaining_time == 0.0
@@ -218,9 +221,12 @@ def test_finals_completes_when_time_expires(
     effects: list[dict[str, int]] = []
     scene = create_finals(effects)
 
+    assert len(scene.items) > 0
+
     scene.remaining_time = 0.01
     scene.update(0.02)
 
+    assert len(scene.items) == 0
     assert scene.time_expired
     assert scene.is_complete()
     assert scene.remaining_time == 0.0
