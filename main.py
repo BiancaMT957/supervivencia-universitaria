@@ -6,7 +6,7 @@ Controles:
     ESPACIO / ENTER   →  Iniciar desde el menú
     Flechas / WASD    →  Mover al estudiante
     R                 →  Reiniciar
-    ESC               →  Salir
+    ESC               →  Volver al menú (durante juego) / Salir (en menú u otros)
 """
 
 import sys
@@ -16,9 +16,16 @@ from player  import Player
 from stats   import Stats
 from objects import ObjectManager
 
+# ── Nuevos módulos (#9 HUD, #5 Eventos, #7 Menú, #3 Escenas, #10 Finales, #6 Victoria/Derrota) ──
+from ui      import draw_hud_enriched
+from events  import EventManager
+from scenes  import SceneManager, MenuRenderer
+from screens import ScreenManager, check_victoria_derrota
 
+
+# ─────────────────────────────────────────────
 #  CONFIGURACIÓN
-
+# ─────────────────────────────────────────────
 
 SCREEN_W = 800
 SCREEN_H = 600
@@ -28,6 +35,7 @@ TITLE    = "Supervivencia Universitaria: La Vida Da Vueltas"
 # Rutas de assets
 BG_MENU    = "assets/menu.png"
 BG_CAMPUS  = "assets/campus.png"
+BG_FINALS  = "assets/finals_bg.png"
 PLAYER_IMG = "assets/player.png"
 
 # Colores de fallback (se usan si el asset no carga)
@@ -45,10 +53,13 @@ STATE_MENU    = "menu"
 STATE_PLAYING = "playing"
 STATE_OVER    = "over"
 
+# Duración del semestre (ms)
+DURACION_SEMESTRE = 300_000.0   # 5 minutos
 
 
+# ─────────────────────────────────────────────
 #  CARGA DE IMÁGENES CON FALLBACK
-
+# ─────────────────────────────────────────────
 
 def load_bg(path: str) -> pygame.Surface | None:
     """Carga un fondo y lo escala a la pantalla. Devuelve None si falla."""
@@ -60,9 +71,9 @@ def load_bg(path: str) -> pygame.Surface | None:
         return None
 
 
-
-#  FUNCIONES DE RENDER
-
+# ─────────────────────────────────────────────
+#  FUNCIONES DE RENDER (auxiliares, sin cambios)
+# ─────────────────────────────────────────────
 
 def draw_background(
     surface   : pygame.Surface,
@@ -86,44 +97,17 @@ def draw_background(
         pygame.draw.rect(surface, C_BORDE, (0, 0, SCREEN_W, SCREEN_H), 3)
 
 
-def draw_menu(
-    surface    : pygame.Surface,
-    bg_menu    : pygame.Surface | None,
-    font_title : pygame.font.Font,
-    font_sub   : pygame.font.Font,
-) -> None:
-    """Pantalla de menú principal."""
-    draw_background(surface, bg_menu, C_BG_MENU, with_grid=False)
-
-    # Overlay semitransparente para legibilidad si hay imagen de fondo
-    if bg_menu:
-        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 120))
-        surface.blit(overlay, (0, 0))
-
-    cx = SCREEN_W // 2
-    title1 = font_title.render("SUPERVIVENCIA UNIVERSITARIA", True, C_ACCENT)
-    title2 = font_title.render("La Vida Da Vueltas", True, C_TEXT)
-    sub    = font_sub.render("ESPACIO o ENTER para iniciar", True, C_ACCENT)
-    esc    = font_sub.render("ESC para salir", True, (180, 180, 180))
-
-    surface.blit(title1, (cx - title1.get_width() // 2, 180))
-    surface.blit(title2, (cx - title2.get_width() // 2, 230))
-    surface.blit(sub,    (cx - sub.get_width()    // 2, 340))
-    surface.blit(esc,    (cx - esc.get_width()    // 2, 380))
-
-
 def draw_leyenda(surface: pygame.Surface, font: pygame.font.Font) -> None:
     """Leyenda de objetos en la parte inferior izquierda."""
     items = [
-        ("TAR", "Tarea       +2 Notas -10 Eng",     ( 70, 140, 230)),
-        ("APT", "Apuntes     +1 Notas  -5 Eng",     ( 40, 190, 150)),
-        ("CFE", "Cafe       +25 Eng   -S/30",        (160,  90,  40)),
-        ("BCA", "Beca        +1 Nota  +S/200",       (220, 180,  30)),
-        ("VJ",  "Videojuegos -3 Notas -15 Eng -S/30",(130,  50, 210)),
-        ("RS",  "Distraccion -2 Notas  -5 Eng -S/20",(220,  60, 130)),
-        ("BLT", "Laptop Rota -2 Notas -S/50",        (180,  60,  60)),
-        ("ENF", "Enfermedad  -2 Notas -20 Eng",      ( 80, 170,  80)),
+        ("TAR", "Tarea       +2 Notas -10 Eng",      ( 70, 140, 230)),
+        ("APT", "Apuntes     +1 Notas  -5 Eng",      ( 40, 190, 150)),
+        ("CFE", "Cafe       +25 Eng   -S/30",         (160,  90,  40)),
+        ("BCA", "Beca        +1 Nota  +S/200",        (220, 180,  30)),
+        ("VJ",  "Videojuegos -3 Notas -15 Eng -S/30", (130,  50, 210)),
+        ("RS",  "Distraccion -2 Notas  -5 Eng -S/20", (220,  60, 130)),
+        ("BLT", "Laptop Rota -2 Notas -S/50",         (180,  60,  60)),
+        ("ENF", "Enfermedad  -2 Notas -20 Eng",       ( 80, 170,  80)),
     ]
     base_y = SCREEN_H - 10 - len(items) * 17
     for i, (sim, desc, col) in enumerate(items):
@@ -131,57 +115,16 @@ def draw_leyenda(surface: pygame.Surface, font: pygame.font.Font) -> None:
         surface.blit(s, (10, base_y + i * 17))
 
 
-def draw_hud_overlay(
-    surface : pygame.Surface,
-    font    : pygame.font.Font,
-    clock   : pygame.time.Clock,
-    obj_mgr : ObjectManager,
-) -> None:
-    """FPS y conteo de objetos en esquina superior derecha."""
-    fps = font.render(f"FPS: {clock.get_fps():.0f}", True, C_ACCENT)
-    cnt = font.render(f"Objetos: {obj_mgr.cantidad()}", True, C_ACCENT)
-    surface.blit(fps, (SCREEN_W - fps.get_width() - 10, SCREEN_H - 24))
-    surface.blit(cnt, (SCREEN_W - cnt.get_width() - 10, 10))
-
-
 def draw_controls(surface: pygame.Surface, font: pygame.font.Font) -> None:
-    lines = ["Mover: Flechas / WASD", "R: Reiniciar  ESC: Salir"]
+    lines = ["Mover: Flechas / WASD", "R: Reiniciar  ESC: Menú"]
     for i, l in enumerate(lines):
         s = font.render(l, True, C_TEXT)
         surface.blit(s, (SCREEN_W - s.get_width() - 10, 30 + i * 18))
 
 
-def draw_game_over(
-    surface    : pygame.Surface,
-    font_big   : pygame.font.Font,
-    font_small : pygame.font.Font,
-    estado     : str,
-) -> None:
-    overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 170))
-    surface.blit(overlay, (0, 0))
-
-    mensajes = {
-        "derrota_energia": ("Sin energia!",  "El estudiante colapso de agotamiento."),
-        "derrota_dinero" : ("Sin dinero!",   "No puedes cubrir tus gastos universitarios."),
-        "derrota_notas"  : ("Jalado!",       "Las notas cayeron a cero. Fin del ciclo."),
-        "victoria"       : ("Aprobaste!",    "Sobreviviste el semestre universitario!"),
-    }
-    titulo, sub = mensajes.get(estado, ("Game Over", ""))
-    color = C_VICTORIA if estado == "victoria" else C_DERROTA
-    cx    = SCREEN_W // 2
-
-    t = font_big.render(titulo, True, color)
-    s = font_small.render(sub,   True, C_TEXT)
-    r = font_small.render("R = reiniciar   |   ESC = salir", True, C_ACCENT)
-    surface.blit(t, (cx - t.get_width() // 2, 210))
-    surface.blit(s, (cx - s.get_width() // 2, 275))
-    surface.blit(r, (cx - r.get_width() // 2, 330))
-
-
-
+# ─────────────────────────────────────────────
 #  FÁBRICAS
-
+# ─────────────────────────────────────────────
 
 def make_player() -> Player:
     return Player(
@@ -190,13 +133,13 @@ def make_player() -> Player:
         screen_width  = SCREEN_W,
         screen_height = SCREEN_H,
         speed         = 4,
-        image_path    = PLAYER_IMG,   # ← usa el sprite del jugador
+        image_path    = PLAYER_IMG,
     )
 
 
-
+# ─────────────────────────────────────────────
 #  MAIN
-
+# ─────────────────────────────────────────────
 
 def main() -> None:
     pygame.init()
@@ -204,98 +147,165 @@ def main() -> None:
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     clock  = pygame.time.Clock()
 
+    # Fuentes
     font_sym   = pygame.font.SysFont("consolas", 13, bold=True)
     font_hud   = pygame.font.SysFont("consolas", 15)
     font_title = pygame.font.SysFont("arial",    30, bold=True)
     font_big   = pygame.font.SysFont("arial",    52, bold=True)
     font_small = pygame.font.SysFont("arial",    22)
 
-    #  Cargar fondos
+    # Fondos
     bg_menu   = load_bg(BG_MENU)
     bg_campus = load_bg(BG_CAMPUS)
-    # bg_finals = load_bg("assets/finals_bg.png")  ← Issue #3
+    bg_finals = load_bg(BG_FINALS)   # None si no existe el archivo
 
-    #  Estado de la app
+    # ── Managers nuevos (#3, #7, #10) ──────────────────────────────────
+    scene_mgr  = SceneManager(SCREEN_W, SCREEN_H)
+    menu_rend  = MenuRenderer(SCREEN_W, SCREEN_H, bg_menu)
+    screen_mgr = ScreenManager(SCREEN_W, SCREEN_H, bg_finals)
+
+    # ── Estado de la app ───────────────────────────────────────────────
     app_state = STATE_MENU
     player    = None
     stats     = None
     obj_mgr   = None
+    event_mgr = None           # (#5) inicializado en start_game()
+    elapsed_ms = 0.0           # tiempo acumulado de la partida activa
 
-    def start_game():
-        nonlocal player, stats, obj_mgr, app_state
-        player    = make_player()
-        stats     = Stats()
-        obj_mgr   = ObjectManager(SCREEN_W, SCREEN_H)
-        app_state = STATE_PLAYING
+    # ── start_game ─────────────────────────────────────────────────────
+    def start_game() -> None:
+        nonlocal player, stats, obj_mgr, app_state, event_mgr, elapsed_ms
+        player     = make_player()
+        stats      = Stats()
+        obj_mgr    = ObjectManager(SCREEN_W, SCREEN_H)
+        event_mgr  = EventManager()       # (#5) nuevo manager de eventos
+        elapsed_ms = 0.0                  # resetear cronómetro
+        screen_mgr.reset()               # (#10) limpiar pantalla final
+        app_state  = STATE_PLAYING
         print("[main] Partida iniciada.")
 
-    #  GAME LOOP
+    # ── GAME LOOP ───────────────────────────────────────────────────────
     running = True
+
     while running:
         dt_ms = clock.tick(FPS)
 
-        # EVENTOS
-        for event in pygame.event.get():
+        # Actualizar animaciones del menú cada frame (fuera del for de eventos)
+        menu_rend.update(dt_ms)          # (#7) animación de título y botones
+
+        # ── CAPTURA DE EVENTOS ────────────────────────────────────────
+        eventos = pygame.event.get()     # lista capturada una sola vez
+
+        for event in eventos:
             if event.type == pygame.QUIT:
                 running = False
 
             if event.type == pygame.KEYDOWN:
+
                 if event.key == pygame.K_ESCAPE:
                     if app_state == STATE_PLAYING:
-                        app_state = STATE_MENU   # volver al menú
+                        scene_mgr.goto_menu()    # (#3) fade hacia menú
+                        app_state = STATE_MENU
                     else:
                         running = False
 
-                # Iniciar desde menú o reiniciar desde fin
                 if event.key in (pygame.K_SPACE, pygame.K_RETURN):
                     if app_state == STATE_MENU:
+                        scene_mgr.goto_playing() # (#3) fade hacia juego
                         start_game()
 
                 if event.key == pygame.K_r:
                     if app_state in (STATE_PLAYING, STATE_OVER):
-                        start_game()   # reinicio completo
+                        scene_mgr.goto_playing() # (#3) fade al reiniciar
+                        start_game()
 
-        # UPDATE
+        # ── UPDATE ────────────────────────────────────────────────────
+        scene_mgr.update(dt_ms)          # (#3) avanzar fade de transición
+
         if app_state == STATE_PLAYING:
-            game_estado = stats.estado_juego()
+            screen_mgr.update(dt_ms)     # (#10) avanzar animación de pantalla final
 
-            if game_estado == "jugando":
+            # (#6) Evaluar victoria / derrota
+            fin = check_victoria_derrota(stats)
+
+            if fin is None:
+                # Partida en curso
+                elapsed_ms += dt_ms
                 keys = pygame.key.get_pressed()
                 player.update(keys)
                 obj_mgr.update(float(dt_ms), player.get_rect(), stats)
+                event_mgr.update(float(dt_ms), stats)   # (#5) eventos aleatorios
             else:
+                # Fin de partida detectado
+                screen_mgr.activar(fin, stats, elapsed_ms)  # (#10) activar pantalla final
+                scene_mgr.goto_over()                        # (#3) fade a STATE_OVER
                 app_state = STATE_OVER
 
-        # RENDER
-        if app_state == STATE_MENU:
-            draw_menu(screen, bg_menu, font_title, font_small)
+        if app_state == STATE_OVER:
+            screen_mgr.update(dt_ms)     # (#10) seguir animando pantalla final
 
-        elif app_state in (STATE_PLAYING, STATE_OVER):
+        # ── RENDER ────────────────────────────────────────────────────
+
+        # ── Menú ──────────────────────────────────────────────────────
+        if app_state == STATE_MENU:
+            # (#7) MenuRenderer con animaciones y botones interactivos
+            accion = menu_rend.draw(
+                screen, font_title, font_small, font_hud, eventos
+            )
+            if accion == "play":
+                scene_mgr.goto_playing()
+                start_game()
+            elif accion == "quit":
+                running = False
+
+        # ── Juego activo ───────────────────────────────────────────────
+        elif app_state == STATE_PLAYING:
             # Fondo del campus
             draw_background(screen, bg_campus, C_BG_CAMPUS)
 
-            # Título de escenario para el escenario 1
-            t = font_title.render("Campus — Ciclo I", True, C_ACCENT)
-            # Sombra sutil para legibilidad sobre la imagen
+            # Título de escenario
+            t        = font_title.render("Campus — Ciclo I", True, C_ACCENT)
             t_shadow = font_title.render("Campus — Ciclo I", True, (0, 0, 0))
             screen.blit(t_shadow, (SCREEN_W // 2 - t.get_width() // 2 + 2, 16))
             screen.blit(t,        (SCREEN_W // 2 - t.get_width() // 2,     14))
 
-            # Objetos hasta jugador (orden: objetos debajo, jugador encima)
+            # Objetos y jugador
             obj_mgr.draw(screen, font_sym)
             player.draw(screen)
 
-            # HUD de estadísticas
+            # HUD de estadísticas (el de stats.py, sin cambios)
             stats.draw_hud(screen, font_hud, x=10, y=50)
 
-            # Leyenda, controles, FPS
+            # Leyenda y controles
             draw_leyenda(screen, font_hud)
             draw_controls(screen, font_hud)
-            draw_hud_overlay(screen, font_hud, clock, obj_mgr)
 
-            # Overlay de fin si corresponde
-            if app_state == STATE_OVER:
-                draw_game_over(screen, font_big, font_small, stats.estado_juego())
+            # (#9) HUD enriquecido: barra de semestre, semáforo de peligro,
+            #      banner de evento activo, FPS y conteo de objetos
+            draw_hud_enriched(
+                surface       = screen,
+                font_hud      = font_hud,
+                font_sym      = font_sym,
+                clock         = clock,
+                obj_mgr       = obj_mgr,
+                stats         = stats,
+                screen_w      = SCREEN_W,
+                screen_h      = SCREEN_H,
+                elapsed_ms    = elapsed_ms,
+                duracion_ms   = DURACION_SEMESTRE,
+                evento_activo = event_mgr.evento_activo if event_mgr else None,
+            )
+
+        # ── Pantalla final ─────────────────────────────────────────────
+        elif app_state == STATE_OVER:
+            # Fondo del campus como base (pantalla final se dibuja encima)
+            draw_background(screen, bg_campus, C_BG_CAMPUS)
+
+            # (#10) Pantalla final animada (victoria o derrota_*)
+            screen_mgr.draw(screen, font_big, font_small, font_hud, clock)
+
+        # ── Capa de transición (fade, siempre al final) ────────────────
+        scene_mgr.draw_transition(screen)   # (#3) overlay negro de fade
 
         pygame.display.flip()
 
