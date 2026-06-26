@@ -1,25 +1,3 @@
-"""
-events.py
-"Supervivencia Universitaria: La Vida Da Vueltas"
-
-Funcionalidad #5 – Eventos aleatorios (examen sorpresa, parcial difícil, etc.)
-
-Arquitectura:
-    · RandomEvent  → dato de un evento: nombre, efectos, duración visual.
-    · EventManager → controla el intervalo entre eventos, activa uno aleatorio
-                     y aplica sus efectos sobre Stats.
-
-Uso en el game loop (STATE_PLAYING):
-    # — inicialización —
-    event_mgr = EventManager()
-
-    # — update —
-    event_mgr.update(dt_ms, stats)
-
-    # — render (pasar a ui.draw_hud_enriched) —
-    evento_activo = event_mgr.evento_activo
-"""
-
 import random
 import pygame
 from typing import TYPE_CHECKING
@@ -27,20 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from stats import Stats
 
-
-# ─────────────────────────────────────────────
-#  CATÁLOGO DE EVENTOS
-# ─────────────────────────────────────────────
-#  Cada entrada es un dict con:
-#    nombre            : str  – nombre corto visible en el HUD
-#    descripcion_corta : str  – una línea de contexto
-#    descripcion_larga : str  – texto para la pantalla de evento (escenas.py)
-#    efectos           : dict – modificadores inmediatos sobre Stats
-#                               claves: "energia", "dinero", "notas"
-#    duracion_ms       : int  – cuánto tiempo se muestra el banner (ms)
-#    color             : tuple – color del banner/pantalla
-# ─────────────────────────────────────────────
-
+# lista de eventos aleatorios que pueden pasar
 CATALOGO_EVENTOS: list[dict] = [
     {
         "nombre"           : "Examen Sorpresa",
@@ -108,17 +73,10 @@ CATALOGO_EVENTOS: list[dict] = [
     },
 ]
 
-# Pesos de aparición (primeros eventos negativos son más frecuentes)
+# probabilidad de que salgan los malos vs los buenos
 _PESOS_EVENTOS = [4, 4, 3, 2, 3, 2, 2, 4]
 
-
-# ─────────────────────────────────────────────
-#  CLASE: RandomEvent
-# ─────────────────────────────────────────────
-
 class RandomEvent:
-    """Instancia activa de un evento sorpresa."""
-
     def __init__(self, data: dict) -> None:
         self.nombre             = data["nombre"]
         self.descripcion_corta  = data["descripcion_corta"]
@@ -137,7 +95,6 @@ class RandomEvent:
             self.activo = False
 
     def aplicar_efectos(self, stats: "Stats") -> None:
-        """Aplica los modificadores sobre Stats (se llama UNA sola vez al activarse)."""
         for stat, delta in self.efectos.items():
             if stat == "energia":
                 stats.modificar_energia(delta)
@@ -145,25 +102,12 @@ class RandomEvent:
                 stats.modificar_dinero(delta)
             elif stat == "notas":
                 stats.modificar_notas(delta)
-        print(f"[EventManager] Evento '{self.nombre}' activado → {self.efectos}")
+        print(f"[EventManager] Evento '{self.nombre}' activado -> {self.efectos}")
 
     def __repr__(self) -> str:
         return f"RandomEvent('{self.nombre}', activo={self.activo}, restante={self.tiempo_restante_ms:.0f}ms)"
 
-
-# ─────────────────────────────────────────────
-#  CLASE: EventManager
-# ─────────────────────────────────────────────
-
 class EventManager:
-    """
-    Controla la lógica de disparo de eventos aleatorios.
-
-    Parámetros de constructor:
-        intervalo_min_ms : tiempo mínimo entre eventos (default 18 s)
-        intervalo_max_ms : tiempo máximo entre eventos (default 35 s)
-    """
-
     def __init__(
         self,
         intervalo_min_ms: float = 18_000.0,
@@ -174,21 +118,16 @@ class EventManager:
         self._proximo_ms    = self._nuevo_intervalo()
         self._acumulado_ms  = 0.0
         self.evento_activo: RandomEvent | None = None
-        # Historial para evitar repetir el mismo evento dos veces seguidas
         self._ultimo_idx: int | None = None
-
-    # ── Intervalo aleatorio ────────────────────────────────────────────
 
     def _nuevo_intervalo(self) -> float:
         return random.uniform(self._intervalo_min, self._intervalo_max)
-
-    # ── Selección de evento ────────────────────────────────────────────
 
     def _seleccionar_evento(self) -> RandomEvent:
         indices     = list(range(len(CATALOGO_EVENTOS)))
         pesos_local = list(_PESOS_EVENTOS)
 
-        # Reducir peso del último evento para evitar repetición inmediata
+        # bajamos peso al ultimo evento para no spamear
         if self._ultimo_idx is not None:
             pesos_local[self._ultimo_idx] = max(1, pesos_local[self._ultimo_idx] - 3)
 
@@ -196,18 +135,13 @@ class EventManager:
         self._ultimo_idx = idx
         return RandomEvent(CATALOGO_EVENTOS[idx])
 
-    # ── Update (llamar cada frame mientras STATE_PLAYING) ─────────────
-
     def update(self, dt_ms: float, stats: "Stats") -> None:
-        # Actualizar evento en curso
         if self.evento_activo and self.evento_activo.activo:
             self.evento_activo.update(dt_ms)
 
-        # Acumular tiempo hacia el próximo evento
         self._acumulado_ms += dt_ms
 
         if self._acumulado_ms >= self._proximo_ms:
-            # Solo disparar si no hay evento activo
             if self.evento_activo is None or not self.evento_activo.activo:
                 self._disparar_evento(stats)
             self._acumulado_ms  = 0.0
@@ -216,8 +150,6 @@ class EventManager:
     def _disparar_evento(self, stats: "Stats") -> None:
         self.evento_activo = self._seleccionar_evento()
         self.evento_activo.aplicar_efectos(stats)
-
-    # ── Reset (al reiniciar partida) ───────────────────────────────────
 
     def reset(self) -> None:
         self._acumulado_ms  = 0.0
