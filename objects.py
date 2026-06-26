@@ -1,3 +1,21 @@
+
+"""
+objects.py
+Objetos del juego (son 8)):
+POSITIVOS:
+    task         → Tarea        +2 Notas  -10 Energía
+    notes        → Apuntes      +1 Notas   -5 Energía
+    coffee       → Café        +25 Energía -30 Dinero
+    scholarship  → Beca         +1 Notas +200 Dinero
+
+NEGATIVOS:
+    gamepad      → Videojuegos  -3 Notas  -15 Energía  -30 Dinero
+    distraction  → Distracciones-2 Notas   -5 Energía  -20 Dinero
+    broken_laptop→ Laptop Rota  -2 Notas             -50 Dinero
+    sick         → Enfermedad   -2 Notas  -20 Energía
+"""
+
+
 import pygame
 import random
 import math
@@ -6,10 +24,28 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from stats import Stats
 
+
 ASSETS_DIR = "assets/"
 
 # data de los objetos (stats)
 OBJETO_CONFIG: dict[str, dict] = {
+
+
+
+#  RUTAS DE LOS ASSETS
+
+
+ASSETS_DIR = "assets/"
+
+
+#  CONFIGURACIÓN DE OBJETOS
+
+
+OBJETO_CONFIG: dict[str, dict] = {
+
+    # POSITIVOS
+
+
     "tareas": {
         "nombre"     : "Tarea",
         "simbolo"    : "TAR",
@@ -31,6 +67,13 @@ OBJETO_CONFIG: dict[str, dict] = {
         "forma"      : "rect",
         "size"       : 44,
         "efectos"    : {"conocimiento": +15, "energia": -15},
+        "descripcion": "Repaso listo!",
+        "image_path" : ASSETS_DIR + "notes.png",
+        "color"      : ( 40, 190, 150),
+        "color_borde": (100, 230, 190),
+        "forma"      : "rect",
+        "size"       : 44,
+        "efectos"    : {"notas": +1, "energia": -5},
     },
     "cafe": {
         "nombre"     : "Cafe",
@@ -54,6 +97,7 @@ OBJETO_CONFIG: dict[str, dict] = {
         "size"       : 48,
         "efectos"    : {"dinero": +200, "notas": +1},
     },
+
     "videojuegos": {
         "nombre"     : "Videojuegos",
         "simbolo"    : "VJ",
@@ -105,28 +149,51 @@ STAT_NOMBRE: dict[str, str] = {
     "energia": "Energia",
     "dinero" : "Dinero",
     "conocimiento" : "Conocim.",
-}
 
 C_POSITIVO     = (120, 255, 120)
 C_NEGATIVO     = (255,  90,  90)
 FLOAT_LIFETIME = 1_600
 FLOAT_SPEED    = 0.055
+FLOAT_LIFETIME = 1_600    # ms
+FLOAT_SPEED    = 0.055    # px/ms
+
+
+
+#  CACHÉ DE IMÁGENES  (carga cada imagen una sola vez)
+
 
 _image_cache: dict[str, pygame.Surface | None] = {}
 
 def _load_image(path: str, size: int) -> pygame.Surface | None:
+
+    """
+    Carga y escala una imagen. Guarda en caché para no releerla en cada spawn.
+    Devuelve None si el archivo no existe o no se puede leer.
+    """
+
     key = f"{path}:{size}"
     if key not in _image_cache:
         try:
             raw = pygame.image.load(path).convert_alpha()
             _image_cache[key] = pygame.transform.scale(raw, (size, size))
         except (pygame.error, FileNotFoundError):
+
             print(f"[assets] No se encontró '{path}' - usando forma de color.")
+            print(f"[assets] No se encontró '{path}' — usando forma de color.")
+
             _image_cache[key] = None
     return _image_cache[key]
 
 
+
 class GameObj:
+
+
+class GameObj:
+    """Objeto recolectable en el mapa."""
+
+    # Margen del glow en píxeles
+
     GLOW_PAD = 4
 
     def __init__(self, tipo: str, x: int, y: int) -> None:
@@ -135,9 +202,14 @@ class GameObj:
         size       = self.data["size"]
         self.rect  = pygame.Rect(x, y, size, size)
         self.image = _load_image(self.data["image_path"], size)
-
         self._bob_phase = random.uniform(0, math.tau)
         self._bob_t     = 0.0
+
+        # Animación de bob (suave oscilación vertical)
+        self._bob_phase = random.uniform(0, math.tau)
+        self._bob_t     = 0.0
+
+    #  Actualización
 
     def update(self, dt_ms: float) -> None:
         self._bob_t += dt_ms * 0.003
@@ -145,8 +217,17 @@ class GameObj:
     def _bob_dy(self) -> int:
         return int(math.sin(self._bob_t + self._bob_phase) * 4)
 
+dev-Jhiens
     def collides_with(self, player_rect: pygame.Rect) -> bool:
         return self.rect.colliderect(player_rect)
+
+    #  Colisión
+
+    def collides_with(self, player_rect: pygame.Rect) -> bool:
+        return self.rect.colliderect(player_rect)
+
+    #  Dibujado
+
 
     def draw(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         dy   = self._bob_dy()
@@ -167,8 +248,16 @@ class GameObj:
         size    : int,
         dy      : int,
     ) -> None:
+
         color_borde = self.data["color_borde"]
         pad         = self.GLOW_PAD
+
+
+        """Dibuja el sprite con un glow circular de fondo."""
+        color_borde = self.data["color_borde"]
+        pad         = self.GLOW_PAD
+
+        # Glow: círculo semitransparente detrás del sprite
 
         glow_surf = pygame.Surface((size + pad * 2, size + pad * 2), pygame.SRCALPHA)
         pygame.draw.circle(
@@ -177,6 +266,10 @@ class GameObj:
             size // 2 + pad,
         )
         surface.blit(glow_surf, (cx - size // 2 - pad, cy - size // 2 - pad))
+
+
+        # Sprite
+
         surface.blit(self.image, (cx - size // 2, cy - size // 2))
 
     def _draw_fallback(
@@ -188,6 +281,9 @@ class GameObj:
         size    : int,
         dy      : int,
     ) -> None:
+
+        """Forma de color + símbolo cuando no hay imagen."""
+
         color       = self.data["color"]
         color_borde = self.data["color_borde"]
         forma       = self.data["forma"]
@@ -203,6 +299,8 @@ class GameObj:
         sym = font.render(self.data["simbolo"], True, (255, 255, 255))
         surface.blit(sym, (cx - sym.get_width() // 2, cy - sym.get_height() // 2))
 
+
+
     def get_effect_lines(self) -> list[tuple[str, tuple]]:
         lineas = []
         for stat, delta in self.data["efectos"].items():
@@ -216,7 +314,16 @@ class GameObj:
         return f"GameObj(tipo='{self.tipo}', pos=({self.rect.x},{self.rect.y}))"
 
 
+
 class FloatingText:
+
+
+#  CLASE: FloatingText
+
+
+class FloatingText:
+    """Texto que flota hacia arriba al recoger un objeto y se desvanece."""
+
     def __init__(self, x: float, y: float, lineas: list[tuple[str, tuple]]) -> None:
         self.x       = float(x)
         self.y       = float(y)
@@ -244,11 +351,26 @@ class FloatingText:
             surface.blit(surf, (self.x - surf.get_width() // 2, self.y + i * line_h))
 
 
+
 class ObjectManager:
     RESPAWN_DELAY = 2_000
     MAX_OBJETOS   = 8
     TIPOS  = list(OBJETO_CONFIG.keys())
     PESOS  = [5, 4, 6, 2, 1, 2, 1, 1]
+
+#  CLASE: ObjectManager
+
+
+class ObjectManager:
+    """Gestiona spawn, colisiones, efectos y respawn de todos los objetos."""
+
+    RESPAWN_DELAY = 2_500   # ms
+    MAX_OBJETOS   = 6
+
+    # Tipos disponibles y sus pesos de aparición
+    TIPOS  = list(OBJETO_CONFIG.keys())
+    PESOS  = [3, 3, 2, 2, 1, 2, 1, 1]   # tareas y apuntes más frecuentes
+
 
     def __init__(self, screen_w: int, screen_h: int) -> None:
         self.screen_w       = screen_w
@@ -258,6 +380,10 @@ class ObjectManager:
         self._respawn_queue : list[tuple[float, str]] = []
         self._spawn_inicial()
         print(f"[ObjectManager] {len(self.objetos)} objetos generados.")
+
+
+    # Spawn
+
 
     def _spawn_inicial(self) -> None:
         iniciales = ["tareas", "apuntes", "cafe", "videojuegos", "redes", "beca"]
@@ -282,6 +408,7 @@ class ObjectManager:
 
         return GameObj(tipo, x, y)
 
+
     def update(
         self,
         dt_ms       : float,
@@ -292,6 +419,7 @@ class ObjectManager:
 
         for obj in self.objetos:
             obj.update(dt_ms)
+
 
         recolectados = [o for o in self.objetos if o.collides_with(player_rect)]
         for obj in recolectados:
@@ -319,14 +447,20 @@ class ObjectManager:
             if stat == "notas"  : stats.modificar_notas(delta)
             elif stat == "energia": stats.modificar_energia(delta)
             elif stat == "dinero" : stats.modificar_dinero(delta)
+
             elif stat == "conocimiento": stats.modificar_conocimiento(delta)
         print(f"[Colisión] {obj.data['nombre']}: {obj.data['efectos']} -> {obj.data['descripcion']}")
+        print(f"[Colisión] {obj.data['nombre']}: {obj.data['efectos']} → {obj.data['descripcion']}")
+
+    #  Draw
+
 
     def draw(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
         for obj in self.objetos:
             obj.draw(surface, font)
         for ft in self.floating_texts:
             ft.draw(surface, font)
+
 
     def reset(self) -> None:
         self.objetos.clear()
@@ -340,4 +474,7 @@ class ObjectManager:
     def __repr__(self) -> str:
         return (f"ObjectManager(activos={len(self.objetos)}, "
                 f"respawn={len(self._respawn_queue)}, "
+
                 f"flotantes={len(self.floating_texts)})")
+                f"flotantes={len(self.floating_texts)})")
+

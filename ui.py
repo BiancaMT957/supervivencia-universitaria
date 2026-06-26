@@ -131,3 +131,4 @@ def draw_hud_enriched(
     _draw_barra_tiempo(surface, font_hud, elapsed_ms, duracion_ms, screen_w)
     _draw_evento_activo(surface, font_hud, font_sym, evento_activo, screen_w)
     _draw_mini_overlay(surface, font_hud, clock, obj_mgr, screen_w, screen_h)
+

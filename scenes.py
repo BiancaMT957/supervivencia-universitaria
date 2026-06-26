@@ -1,3 +1,4 @@
+
 import math
 import pygame
 
@@ -181,3 +182,5 @@ class MenuRenderer:
         surface.blit(ver, (cx - ver.get_width() // 2, self.screen_h - 18))
 
         return accion
+
+
