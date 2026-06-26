@@ -1,3 +1,9 @@
+
+import pygame
+from typing import Tuple
+
+# limites y variables iniciales
+
 """
 stats.py
 
@@ -22,14 +28,55 @@ from typing import Tuple
 
 
 # Energía  (0 = colapso, 100 = descansado)
+
 ENERGIA_INICIAL = 100
 ENERGIA_MIN     =   0
 ENERGIA_MAX     = 100
 
-# Dinero  (soles; 0 = no puede comprar útiles ni comer)
 DINERO_INICIAL  = 500
 DINERO_MIN      =   0
 DINERO_MAX      = 1_000
+
+
+NOTAS_INICIAL   =  10
+NOTAS_MIN       =   0
+NOTAS_MAX       =  20
+NOTAS_APROBADO  =  11
+
+ENERGIA_PELIGRO  = 25
+ENERGIA_BAJO     = 50
+
+DINERO_PELIGRO   = 150
+DINERO_BAJO      = 350
+
+NOTAS_PELIGRO    =  5
+NOTAS_BAJO       = 10
+
+CONOCIMIENTO_INICIAL = 0
+CONOCIMIENTO_MIN     = 0
+CONOCIMIENTO_MAX     = 100
+CONOCIMIENTO_PELIGRO = 25
+CONOCIMIENTO_BAJO    = 50
+
+# colores de la ui para stats
+C_FONDO_PANEL = (20,  20,  45, 200)
+C_BORDE_PANEL = (90,  90, 130)
+C_BARRA_BG    = (50,  50,  80)
+C_NORMAL      = (60, 200,  80)
+C_BAJO        = (230, 160,  30)
+C_PELIGRO     = (210,  40,  40)
+C_LABEL       = (220, 220, 255)
+C_VALOR       = (255, 240, 180)
+
+# tamaos panel hud
+HUD_PANEL_W = 210
+HUD_PANEL_H = 158
+HUD_PADDING = 10
+HUD_BAR_H   =  14
+HUD_BAR_W   = 190
+HUD_ROW_GAP =  36
+
+class Stats:
 
 # Notas  (sistema vigesimal peruano: aprobado >= 11)
 NOTAS_INICIAL   =  10
@@ -93,6 +140,8 @@ class Stats:
         self._energia: float = float(ENERGIA_INICIAL)
         self._dinero:  float = float(DINERO_INICIAL)
         self._notas:   float = float(NOTAS_INICIAL)
+        self._conocimiento: float = float(CONOCIMIENTO_INICIAL)
+
 
     
     #  PROPIEDADES (solo lectura)
@@ -110,7 +159,33 @@ class Stats:
     def notas(self) -> float:
         return self._notas
 
-    
+
+    @property
+    def conocimiento(self) -> float:
+        return self._conocimiento
+
+    def modificar_energia(self, delta: float) -> None:
+        self._energia = self._clamp(self._energia + delta, ENERGIA_MIN, ENERGIA_MAX)
+
+    def modificar_dinero(self, delta: float) -> None:
+        self._dinero = self._clamp(self._dinero + delta, DINERO_MIN, DINERO_MAX)
+
+    def modificar_notas(self, delta: float) -> None:
+        self._notas = self._clamp(self._notas + delta, NOTAS_MIN, NOTAS_MAX)
+
+    def modificar_conocimiento(self, delta: float) -> None:
+        self._conocimiento = self._clamp(
+            self._conocimiento + delta, CONOCIMIENTO_MIN, CONOCIMIENTO_MAX
+        )
+
+    def reset(self) -> None:
+        self._energia      = float(ENERGIA_INICIAL)
+        self._dinero       = float(DINERO_INICIAL)
+        self._notas        = float(NOTAS_INICIAL)
+        self._conocimiento = float(CONOCIMIENTO_INICIAL)
+
+    def estado_juego(self) -> str:
+
     #  MODIFICADORES SEGUROS
     
 
@@ -169,6 +244,29 @@ class Stats:
         return "jugando"
 
     def esta_en_peligro(self) -> bool:
+
+        return (
+            self._energia      <= ENERGIA_PELIGRO
+            or self._dinero    <= DINERO_PELIGRO
+            or self._notas     <= NOTAS_PELIGRO
+            or self._conocimiento <= CONOCIMIENTO_PELIGRO
+        )
+
+    def esta_aprobando(self) -> bool:
+        return self._notas >= NOTAS_APROBADO
+
+    def porcentaje_energia(self) -> float:
+        return self._energia / ENERGIA_MAX
+
+    def porcentaje_dinero(self) -> float:
+        return self._dinero / DINERO_MAX
+
+    def porcentaje_notas(self) -> float:
+        return self._notas / NOTAS_MAX
+
+    def porcentaje_conocimiento(self) -> float:
+        return self._conocimiento / CONOCIMIENTO_MAX
+=======
         """True si alguna estadística está en zona crítica (roja)."""
         return (
             self._energia <= ENERGIA_PELIGRO
@@ -207,6 +305,8 @@ class Stats:
         x: int = 10,
         y: int = 10,
     ) -> None:
+
+
         """
         Dibuja el panel de estadísticas con barras de progreso.
 
@@ -216,12 +316,12 @@ class Stats:
             x, y    : Esquina superior izquierda del panel.
         """
         # Panel de fondo semitransparente
+
         panel = pygame.Surface((HUD_PANEL_W, HUD_PANEL_H), pygame.SRCALPHA)
         panel.fill(C_FONDO_PANEL)
         pygame.draw.rect(panel, C_BORDE_PANEL, (0, 0, HUD_PANEL_W, HUD_PANEL_H), 1)
         surface.blit(panel, (x, y))
 
-        # Definición de cada fila del HUD
         filas = [
             {
                 "icono"         : "ENERGIA",
@@ -244,6 +344,15 @@ class Stats:
                 "umbral_peligro": NOTAS_PELIGRO   / NOTAS_MAX,
                 "umbral_bajo"   : NOTAS_BAJO      / NOTAS_MAX,
             },
+
+            {
+                "icono"         : "CONOCIM.",
+                "valor"         : f"{int(self._conocimiento):3d}/{CONOCIMIENTO_MAX}",
+                "pct"           : self.porcentaje_conocimiento(),
+                "umbral_peligro": CONOCIMIENTO_PELIGRO / CONOCIMIENTO_MAX,
+                "umbral_bajo"   : CONOCIMIENTO_BAJO    / CONOCIMIENTO_MAX,
+            },
+
         ]
 
         row_y = y + HUD_PADDING
@@ -273,6 +382,11 @@ class Stats:
         umbral_peligro : float,
         umbral_bajo    : float,
     ) -> None:
+
+        label_surf = font.render(icono, True, C_LABEL)
+        surface.blit(label_surf, (x, y))
+
+
         """Dibuja una fila: etiqueta  |  barra de progreso  |  valor."""
         # Etiqueta
         label_surf = font.render(icono, True, C_LABEL)
@@ -282,6 +396,7 @@ class Stats:
         val_surf = font.render(valor, True, C_VALOR)
         val_x    = x + HUD_BAR_W - val_surf.get_width()
         surface.blit(val_surf, (val_x, y))
+
 
         # Barra de progreso
         bar_y = y + label_surf.get_height() + 3
@@ -293,7 +408,8 @@ class Stats:
             border_radius=4
         )
 
-        # Relleno proporcional al porcentaje
+
+
         fill_w = max(0, int(HUD_BAR_W * pct))
         if fill_w > 0:
             color = self._color_barra(pct, umbral_peligro, umbral_bajo)
@@ -303,7 +419,7 @@ class Stats:
                 border_radius=4
             )
 
-        # Borde de la barra
+
         pygame.draw.rect(
             surface, C_BORDE_PANEL,
             (x, bar_y, HUD_BAR_W, HUD_BAR_H),
@@ -316,12 +432,19 @@ class Stats:
         umbral_peligro: float,
         umbral_bajo: float,
     ) -> Tuple[int, int, int]:
-        """Devuelve el color de relleno según el nivel actual."""
+
+
         if pct <= umbral_peligro:
             return C_PELIGRO
         if pct <= umbral_bajo:
             return C_BAJO
         return C_NORMAL
+
+
+    @staticmethod
+    def _clamp(value: float, min_val: float, max_val: float) -> float:
+        return max(min_val, min(max_val, value))
+
 
 
     #  UTILIDAD INTERNA
@@ -341,5 +464,11 @@ class Stats:
             f"energia={self._energia:.0f}/{ENERGIA_MAX}, "
             f"dinero={self._dinero:.0f}/{DINERO_MAX}, "
             f"notas={self._notas:.1f}/{NOTAS_MAX}, "
+
+            f"conocimiento={self._conocimiento:.0f}/{CONOCIMIENTO_MAX}, "
             f"estado='{self.estado_juego()}')"
         )
+
+            f"estado='{self.estado_juego()}')"
+        )
+
